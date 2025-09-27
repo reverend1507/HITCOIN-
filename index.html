@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hitcoin Bank</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://js.paystack.co/v1/inline.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body {margin:0;font-family:"Orbitron",sans-serif;background:black;color:silver;font-weight:600;}
+.centered {display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;text-align:center;}
+input, select, button {margin:8px;padding:12px;width:80%;max-width:320px;border-radius:8px;border:none;font-family:inherit;font-weight:600;}
+button {background:silver;color:black;cursor:pointer;transition:all 0.2s ease;}
+button:disabled {background:#666;cursor:not-allowed;}
+button:hover:enabled {background:#00f0ff;color:black;}
+.hidden {display:none;}
+.navbar {position:fixed;bottom:0;width:100%;display:flex;justify-content:space-around;background:#111;padding:10px 0;border-top:1px solid silver;}
+.navbar button {flex:1;margin:0 5px;border-radius:0;}
+h1,h2,h3 {text-shadow:0 0 8px #00f0ff,0 0 15px #00f0ff;}
+#splash {background:black;color:silver;font-size:2em;animation:fadeOut 1s ease forwards;animation-delay:3s;}
+@keyframes fadeOut {to{opacity:0;visibility:hidden;}}
+#historyList{max-height:300px;overflow-y:auto;width:90%;text-align:left;}
+</style>
+</head>
+<body>
+
+<!-- Splash -->
+<div id="splash" class="centered"><h1>Hitcoin Bank</h1><p>Secure. Global. Fast.</p></div>
+
+<!-- Login -->
+<div id="loginPage" class="centered hidden">
+  <h2>Login</h2>
+  <input type="email" id="loginEmail" placeholder="Email">
+  <input type="password" id="loginPassword" placeholder="Password">
+  <button id="loginBtn" onclick="login()">Login</button>
+  <p>Don’t have an account? <a href="#" onclick="showRegister()">Register</a></p>
+</div>
+
+<!-- Register -->
+<div id="registerPage" class="centered hidden">
+  <h2>Create Account</h2>
+  <input type="text" id="regName" placeholder="Full Name">
+  <input type="email" id="regEmail" placeholder="Email">
+  <input type="password" id="regPassword" placeholder="Password">
+  <input type="number" id="regAge" placeholder="Age">
+  <input type="text" id="regNin" placeholder="NIN / NID">
+  <input type="password" maxlength="4" id="regPin" placeholder="4-digit PIN">
+  <input type="text" id="regAccNo" placeholder="Account Number">
+  <select id="regCountry" onchange="fetchBanks()"></select>
+  <select id="regBank"></select>
+  <button onclick="register()">Register</button>
+  <p>Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+</div>
+
+<!-- Main App -->
+<div id="appPage" class="hidden">
+  <div class="centered" style="height:auto;padding:20px;">
+    <h2>Welcome</h2>
+    <p><b>User ID:</b> <span id="userId"></span></p>
+    <h3>Balance: <span id="balance">0</span> Hitcoin</h3>
+    <button onclick="showSection('deposit')">Deposit</button>
+    <button onclick="showSection('withdraw')">Withdraw</button>
+    <button onclick="showSection('transfer')">Transfer</button>
+    <button onclick="showSection('history')">History</button>
+  </div>
+
+  <div id="deposit" class="hidden centered">
+    <h3>Deposit</h3>
+    <input type="number" id="depositAmount" placeholder="Amount in NGN">
+    <button onclick="deposit()">Proceed to Paystack</button>
+  </div>
+
+  <div id="withdraw" class="hidden centered">
+    <h3>Withdraw</h3>
+    <input type="number" id="withdrawAmount" placeholder="Amount in Hitcoin">
+    <input type="password" maxlength="4" id="withdrawPin" placeholder="PIN">
+    <button onclick="withdraw()">Withdraw</button>
+  </div>
+
+  <div id="transfer" class="hidden centered">
+    <h3>Transfer</h3>
+    <input type="text" id="transferUserId" placeholder="Recipient User ID">
+    <input type="number" id="transferAmount" placeholder="Amount in Hitcoin">
+    <input type="password" maxlength="4" id="transferPin" placeholder="PIN">
+    <button onclick="transfer()">Send</button>
+  </div>
+
+  <div id="history" class="hidden centered">
+    <h3>Transaction History</h3>
+    <div id="historyList"></div>
+  </div>
+
+  <div class="navbar">
+    <button onclick="showSection('home')">Home</button>
+    <button onclick="showSection('deposit')">Deposit</button>
+    <button onclick="showSection('withdraw')">Withdraw</button>
+    <button onclick="showSection('transfer')">Transfer</button>
+    <button onclick="showSection('history')">History</button>
+    <button onclick="showSettings()">⚙️</button>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settingsPage" class="centered hidden">
+  <h2>Settings</h2>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<script>
+const API = "http://localhost:4000";
+let currentUser = null;
+const countries = ["Nigeria","Ghana","Kenya","South Africa","USA","UK","Germany","Canada","India","China"];
+function populateCountries(){const sel=document.getElementById("regCountry");sel.innerHTML="<option value=''>Select Country</option>";countries.forEach(c=>{let opt=document.createElement("option");opt.value=c;opt.innerText=c;sel.appendChild(opt);});}
+populateCountries();
+
+async function fetchBanks(){
+  const country=document.getElementById("regCountry").value;
+  const bankSel=document.getElementById("regBank");
+  bankSel.innerHTML="<option>Loading...</option>";
+  try{
+    const res=await fetch(API+"/banks?country="+country);
+    const banks=await res.json();
+    bankSel.innerHTML="";
+    banks.forEach(b=>{let opt=document.createElement("option");opt.value=b.code;opt.innerText=b.name;bankSel.appendChild(opt);});
+  }catch{bankSel.innerHTML="<option>Error loading banks</option>";}
+}
+
+function showRegister(){document.getElementById("loginPage").classList.add("hidden");document.getElementById("registerPage").classList.remove("hidden");}
+function showLogin(){document.getElementById("registerPage").classList.add("hidden");document.getElementById("loginPage").classList.remove("hidden");}
+function showApp(){document.getElementById("loginPage").classList.add("hidden");document.getElementById("registerPage").classList.add("hidden");document.getElementById("appPage").classList.remove("hidden");}
+function showSection(id){
+  ["deposit","withdraw","transfer","history"].forEach(s=>document.getElementById(s).classList.add("hidden"));
+  if(id!=="home"){document.getElementById(id).classList.remove("hidden");if(id==="history") loadHistory();}
+}
+function showSettings(){document.getElementById("appPage").classList.add("hidden");document.getElementById("settingsPage").classList.remove("hidden");}
+function logout(){currentUser=null;document.getElementById("settingsPage").classList.add("hidden");document.getElementById("loginPage").classList.remove("hidden");}
+
+async function register(){
+  const data={fullName:document.getElementById("regName").value,email:document.getElementById("regEmail").value,password:document.getElementById("regPassword").value,accountNumber:document.getElementById("regAccNo").value,bankName:document.getElementById("regBank").selectedOptions[0].innerText,bankCode:document.getElementById("regBank").value,country:document.getElementById("regCountry").value,age:parseInt(document.getElementById("regAge").value),pin:document.getElementById("regPin").value,nin:document.getElementById("regNin").value};
+  const res=await fetch(API+"/register",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const out=await res.json();
+  alert(out.message||out.error);
+  if(out.uid) showLogin();
+}
+
+async function login(){
+  const btn=document.getElementById("loginBtn");
+  btn.disabled=true; btn.innerText="Logging in...";
+  const data={email:document.getElementById("loginEmail").value,password:document.getElementById("loginPassword").value};
+  const res=await fetch(API+"/login",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const out=await res.json();
+  if(out.uid){currentUser=out;document.getElementById("userId").innerText=out.userId;loadBalance();showApp();}
+  else alert(out.error);
+  btn.disabled=false; btn.innerText="Login";
+}
+
+async function loadBalance(){
+  const res=await fetch(API+"/transactions/"+currentUser.uid);
+  const txs=await res.json();let bal=0;
+  txs.forEach(t=>{if(t.type==="deposit"&&t.status==="success") bal+=t.amount;if(t.type==="withdraw"&&t.status==="success") bal-=t.amount+t.fee;if(t.type==="transfer"&&t.from===currentUser.userId) bal-=t.amount+t.fee;if(t.type==="transfer"&&t.to===currentUser.userId) bal+=t.amount;});
+  document.getElementBy
+  ElementById("balance").innerText = bal;
+}
+
+// 🟢 Deposit via Paystack
+async function deposit() {
+  const amount = parseInt(document.getElementById("depositAmount").value);
+  if(!amount || amount <= 0){ alert("Enter a valid amount"); return; }
+  const res = await fetch(API+"/deposit", {
+    method: "POST",
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ uid: currentUser.uid, amount })
+  });
+  const out = await res.json();
+  if(out.authorizationUrl){
+    let handler = PaystackPop.setup({
+      key: "pk_test_xxxxxx", // replace with your Paystack public key
+      email: currentUser.email,
+      amount: amount*100,
+      currency: "NGN",
+      callback: function(response){
+        alert("Payment successful: "+response.reference);
+        loadBalance();
+      },
+      onClose: function(){ alert("Payment cancelled"); }
+    });
+    handler.openIframe();
+  } else { alert(out.error); }
+}
+
+// 🟢 Withdraw
+async function withdraw() {
+  const amount = parseInt(document.getElementById("withdrawAmount").value);
+  const pin = document.getElementById("withdrawPin").value;
+  if(!amount || amount <= 0 || !pin){ alert("Enter valid amount and PIN"); return; }
+  const res = await fetch(API+"/withdraw", {
+    method: "POST",
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ uid: currentUser.uid, amount, pin })
+  });
+  const out = await res.json();
+  alert(out.message || out.error);
+  loadBalance();
+}
+
+// 🟢 Transfer
+async function transfer() {
+  const toUserId = document.getElementById("transferUserId").value;
+  const amount = parseInt(document.getElementById("transferAmount").value);
+  const pin = document.getElementById("transferPin").value;
+  if(!toUserId || !amount || amount <= 0 || !pin){ alert("Fill all transfer fields"); return; }
+  const res = await fetch(API+"/transfer", {
+    method: "POST",
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ fromUid: currentUser.uid, toUserId, amount, pin })
+  });
+  const out = await res.json();
+  alert(out.message || out.error);
+  loadBalance();
+}
+
+// 🟢 Transaction History
+async function loadHistory() {
+  const res = await fetch(API+"/transactions/"+currentUser.uid);
+  const txs = await res.json();
+  const list = document.getElementById("historyList");
+  list.innerHTML = "";
+  if(!txs.length){ list.innerHTML="<p>No transactions yet.</p>"; return; }
+
+  txs.reverse().forEach(t => {
+    let row = document.createElement("div");
+    row.style.borderBottom = "1px solid silver";
+    row.style.padding = "8px";
+    row.style.borderRadius = "8px";
+    row.style.marginBottom = "6px";
+
+    // Color-coded
+    let color="#00f0ff"; // default blue for transfer
+    if(t.type==="deposit") color="#00ff00";
+    if(t.type==="withdraw") color="#ff0000";
+
+    row.innerHTML = `<p style="color:${color}; font-weight:700; text-shadow:0 0 8px ${color},0 0 15px ${color};">
+      <b>Type:</b> ${t.type.toUpperCase()} |
+      <b>Amount:</b> ${t.amount} Hitcoin |
+      <b>Status:</b> ${t.status.toUpperCase()}<br>
+      <small>${new Date(t.timestamp).toLocaleString()}</small>
+    </p>`;
+    list.appendChild(row);
+  });
+}
+
+// Show login after splash
+setTimeout(() => {
+  document.getElementById("splash").classList.add("hidden");
+  document.getElementById("loginPage").classList.remove("hidden");
+}, 3000);
+</script>
+</body>
+  </html>
